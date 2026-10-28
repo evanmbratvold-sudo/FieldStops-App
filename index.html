@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field Stops</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Field Stops">
+<meta name="theme-color" content="#111418">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<style>
+/* Field Stops: one page, no libraries. Everything it knows is in this device's storage. */
+:root{--bg:#111418;--panel:#1a1f26;--line:#2b323c;--text:#eef1f5;--dim:#9aa5b4;--acc:#4da3ff;--ok:#39c46a;--warn:#f5b342;--danger:#e5484d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;height:100%;overscroll-behavior:none}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+select,button,input{font:inherit;color:inherit}
+select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:46vw}
+button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+button.big{font-size:18px;font-weight:600;padding:16px 10px;flex:1}
+button.ok{background:var(--ok);border-color:var(--ok);color:#06220f}
+button.acc{background:var(--acc);border-color:var(--acc);color:#07182b}
+button.ghost{background:transparent}
+button:disabled{opacity:.4}
+main{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom)}
+.tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel)}
+.tabs button{flex:1;border:0;border-radius:0;padding:12px;color:var(--dim)}
+.tabs button.on{color:var(--text);box-shadow:inset 0 -3px 0 var(--acc)}
+.card{margin:12px;padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.num{font-size:13px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+.addr{font-size:26px;font-weight:700;line-height:1.15;margin:4px 0 2px}
+.pid{font-size:17px;color:var(--dim)}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.row>*{flex:1}
+.prog{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:0 12px}
+.prog>div{height:100%;background:var(--ok)}
+.desc{margin-top:10px;font-size:14px;color:var(--dim);white-space:pre-wrap;max-height:9em;overflow:auto}
+.list{margin:0;padding:0;list-style:none}
+.list li{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.list li.done{opacity:.45}
+.list li.cur{background:#1f2a38}
+.list .n{width:46px;font-weight:700;color:var(--acc);flex:none}
+.list .t{flex:1;min-width:0}
+.list .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list .t span{font-size:13px;color:var(--dim)}
+.list .st{font-size:12px;color:var(--dim);flex:none}
+canvas{display:block;width:100%;height:calc(100vh - 150px);touch-action:none;background:#0d1014}
+.hint{padding:14px;color:var(--dim);font-size:14px}
+.empty{padding:40px 20px;text-align:center;color:var(--dim)}
+.empty button{margin-top:14px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2b323c;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center}
+.sheet.show{display:flex}
+.sheet>div{background:var(--panel);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+.sheet h2{margin:0 0 10px;font-size:17px}
+.sheet .row{flex-direction:column}
+label.file{display:block;background:var(--acc);color:#07182b;border-radius:10px;padding:14px;text-align:center;font-weight:600;cursor:pointer}
+label.file input{display:none}
+.small{font-size:13px;color:var(--dim);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Field Stops</h1>
+  <select id="daySel" aria-label="Day"></select>
+  <button id="menuBtn" aria-label="Menu">☰</button>
+</header>
+<div class="tabs" role="tablist">
+  <button class="on" data-tab="now">Now</button><button data-tab="list">List</button><button data-tab="map">Map</button>
+</div>
+<main>
+  <section id="tab-now"></section>
+  <section id="tab-list" hidden><ul class="list" id="list"></ul></section>
+  <section id="tab-map" hidden><canvas id="map"></canvas><div class="hint">Pins are the day's stops: blue = current, green = done, grey = to do. Blue ring = you (if location is allowed). Drag to pan, pinch or double-tap to zoom, tap a pin to make it current.</div></section>
+</main>
+<div class="toast" id="toast"></div>
+<div class="sheet" id="sheet"><div>
+  <h2>Field Stops</h2>
+  <div class="row">
+    <label class="file">Load a day (zip, GPX or JSON from the planner)<input type="file" id="file" accept=".zip,.gpx,.json,application/zip,application/gpx+xml,application/json" multiple></label>
+    <button id="exportBtn">Export this day's results (CSV)</button>
+    <button id="undoBtn">Un-do the last stop</button>
+    <button id="resetBtn">Clear this day's ticks</button>
+    <button id="deleteBtn">Remove this day from the device</button>
+    <button id="closeBtn" class="ghost">Close</button>
+  </div>
+  <div class="small" id="about">Everything stays on this device. Nothing is sent anywhere; the map buttons hand one coordinate to the map app you choose.</div>
+</div></div>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const toastEl=$('toast');let toastT=0;
+const toast=m=>{toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>toastEl.classList.remove('show'),2200)};
+
+/* ---------- storage: IndexedDB, one record per day ---------- */
+const DB='fieldstops',ST='days';
+const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(ST,{keyPath:'key'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const dbAll=async()=>{const d=await idb();return new Promise((res,rej)=>{const q=d.transaction(ST).objectStore(ST).getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})};
+const dbPut=async(rec)=>{const d=await idb();return new Promise((res,rej)=>{const t=d.transaction(ST,'readwrite');t.objectStore(ST).put(rec);t.oncomplete=res;t.onerror=()=>rej(t.error)})};
+const dbDel=async(key)=>{const d=await idb();return new Promise((res,rej)=>{const t=d.transaction(ST,'readwrite');t.objectStore(ST).delete(key);t.oncomplete=res;t.onerror=()=>rej(t.error)})};
+const pref=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}};
+
+/* ---------- parsing the planner's files ---------- */
+const esc=s=>String(s??'');
+function parseGpx(text,fname){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.querySelector('parsererror'))throw new Error(fname+': not a readable GPX file');
+  const meta=doc.querySelector('metadata > name');const title=(meta?meta.textContent:fname).replace(/\.gpx$/i,'').trim();
+  const stops=[];let n=0;
+  for(const w of doc.getElementsByTagName('wpt')){
+    const name=(w.querySelector('name')||{}).textContent||'';
+    if(/^(000|999) Office/.test(name))continue;
+    const m=name.match(/^(\d{3})\s+(.*)$/);let label=m?m[2]:name;let id='';
+    const idm=label.match(/^(.*)\s\(([^()]+)\)(\s\[pickup\])?$/);if(idm){label=idm[1];id=idm[2]}
+    label=label.replace(/\s\[pickup\]$/,'');if(!id&&/^[A-Z]{0,2}\d{5,}$/.test(label.trim())){id=label.trim();label=''}
+    const desc=(w.querySelector('desc')||{}).textContent||'';
+    n++;stops.push({n:m?+m[1]:n,id,name:label.trim(),lat:+w.getAttribute('lat'),lon:+w.getAttribute('lon'),desc,pickup:/\[pickup\]/.test(name)});
+  }
+  if(!stops.length)throw new Error(fname+': no stops in this file');
+  const dm=title.match(/Day (\d+)/i),pm=title.match(/part (\d+) of (\d+)/i);
+  return{key:dm?'Day '+dm[1].padStart(2,'0'):title,title:dm?'Day '+dm[1].padStart(2,'0'):title,part:pm?+pm[1]:1,stops};
+}
+function parseJson(text,fname){
+  const j=JSON.parse(text);if(!j||!Array.isArray(j.stops))throw new Error(fname+': not a Field Stops day file');
+  return{key:j.key||j.title||fname,title:j.title||j.key||fname,stops:j.stops.map((s,i)=>({n:s.n||i+1,id:esc(s.id),name:esc(s.name),lat:+s.lat,lon:+s.lon,desc:esc(s.desc),pickup:!!s.pickup}))};
+}
+async function unzip(u){
+  const dv=new DataView(u.buffer,u.byteOffset,u.byteLength),td=new TextDecoder();
+  let e=-1;for(let i=u.length-22;i>=Math.max(0,u.length-65558);i--){if(dv.getUint32(i,true)===0x06054b50){e=i;break}}
+  if(e<0)throw new Error('Could not open the zip');
+  const n=Math.min(dv.getUint16(e+10,true),2000);let p=dv.getUint32(e+16,true);const out=[];let total=0;
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)break;
+    const method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),el=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),off=dv.getUint32(p+42,true);
+    const name=td.decode(u.subarray(p+46,p+46+nl));p+=46+nl+el+cl;
+    if(!/\.(gpx|json)$/i.test(name))continue;
+    const start=off+30+dv.getUint16(off+26,true)+dv.getUint16(off+28,true),data=u.subarray(start,start+csize);let raw;
+    if(method===0)raw=data;
+    else if(method===8){const rd=new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(),parts=[];let got=0;
+      for(;;){const r=await rd.read();if(r.done)break;got+=r.value.length;total+=r.value.length;if(total>2e8)throw new Error('Zip is too large');parts.push(r.value)}
+      raw=new Uint8Array(got);let o=0;for(const c of parts){raw.set(c,o);o+=c.length}}
+    else continue;
+    out.push({name:name.split('/').pop(),text:td.decode(raw)});
+  }
+  return out;
+}
+async function importFiles(files){
+  let added=0,errs=[];
+  for(const f of files){
+    try{
+      let entries=[];
+      if(/\.zip$/i.test(f.name))entries=await unzip(new Uint8Array(await f.arrayBuffer()));
+      else entries=[{name:f.name,text:await f.text()}];
+      // parts of one day (the planner splits long days for Organic Maps) are joined back into one day here
+      const parsed=[];for(const en of entries){try{parsed.push(/\.json$/i.test(en.name)?parseJson(en.text,en.name):parseGpx(en.text,en.name))}catch(e){errs.push(e.message)}}
+      const byKey=new Map();parsed.sort((a,b)=>(a.part||1)-(b.part||1)).forEach(d=>{if(!byKey.has(d.key))byKey.set(d.key,{...d,stops:[]});byKey.get(d.key).stops.push(...d.stops)});
+      for(const day of byKey.values()){
+        day.stops.sort((a,b)=>a.n-b.n);
+        const old=days.find(d=>d.key===day.key);
+        const rec={key:day.key,title:day.title,stops:day.stops,done:{},skipped:{},log:[],cur:0,added:Date.now()};
+        if(old){rec.done=old.done;rec.skipped=old.skipped;rec.log=old.log;rec.cur=old.cur}
+        await dbPut(rec);added++}
+    }catch(e){errs.push(f.name+': '+e.message)}
+  }
+  await load();
+  toast(added+' day file'+(added===1?'':'s')+' loaded'+(errs.length?'; '+errs.length+' skipped':''));
+  if(errs.length)console.warn(errs);
+}
+
+/* ---------- state ---------- */
+let days=[],day=null,tab='now';
+const sortKey=d=>d.key.replace(/\d+/g,m=>m.padStart(4,'0'));
+async function load(){
+  days=(await dbAll()).sort((a,b)=>sortKey(a)<sortKey(b)?-1:1);
+  const want=pref('day');day=days.find(d=>d.key===want)||days[0]||null;
+  renderDaySel();render();
+}
+const save=()=>day&&dbPut(day);
+const remaining=d=>d.stops.filter(s=>!d.done[s.n]&&!d.skipped[s.n]);
+function nextIndex(d){const i=d.stops.findIndex((s,k)=>k>=d.cur&&!d.done[s.n]&&!d.skipped[s.n]);return i>=0?i:d.stops.findIndex(s=>!d.done[s.n]&&!d.skipped[s.n])}
+
+/* ---------- rendering ---------- */
+function renderDaySel(){const sel=$('daySel');sel.innerHTML='';
+  if(!days.length){sel.hidden=true;return}sel.hidden=false;
+  days.forEach(d=>{const o=document.createElement('option');o.value=d.key;o.textContent=d.key+' · '+remaining(d).length+' left';if(day&&d.key===day.key)o.selected=true;sel.appendChild(o)})}
+const ll=s=>s.lat.toFixed(6)+','+s.lon.toFixed(6);
+function mapLinks(s){const q=encodeURIComponent((s.n+' ')+s.name);
+  return{apple:'https://maps.apple.com/?daddr='+ll(s)+'&dirflg=d',google:'https://www.google.com/maps/dir/?api=1&destination='+ll(s)+'&travelmode=driving',organic:'om://map?v=1&ll='+ll(s)+'&n='+q}}
+function render(){
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  ['now','list','map'].forEach(t=>$('tab-'+t).hidden=t!==tab);
+  const now=$('tab-now');
+  if(!day){now.innerHTML='<div class="empty">No day loaded yet.<br><br>Save a day from the planner, put the zip in Files, then load it here.<br><button id="loadFirst" class="acc">Load a day</button></div>';
+    $('loadFirst').onclick=()=>$('sheet').classList.add('show');$('list').innerHTML='';$('title').textContent='Field Stops';return}
+  const doneN=Object.keys(day.done).length,skipN=Object.keys(day.skipped).length,total=day.stops.length;
+  $('title').textContent=day.title;
+  const i=nextIndex(day);
+  if(tab==='now'){
+    if(i<0){now.innerHTML='<div class="prog"><div style="width:100%"></div></div><div class="card"><div class="addr">Day complete</div><div class="pid">'+doneN+' done, '+skipN+' skipped. Export the results from the menu.</div></div>'}
+    else{const s=day.stops[i],L=mapLinks(s);
+      now.innerHTML='<div class="prog"><div style="width:'+(100*(doneN+skipN)/total)+'%"></div></div>'
+      +'<div class="card"><div class="num">Stop '+String(s.n).padStart(3,'0')+' of '+total+' · '+(total-doneN-skipN)+' left'+(s.pickup?' · pickup':'')+'</div>'
+      +'<div class="addr"></div><div class="pid"></div>'
+      +'<div class="row"><a class="big acc" style="display:block;text-align:center;text-decoration:none;color:#07182b;border-radius:10px;padding:16px 10px;background:var(--acc)" id="navApple" href="'+L.apple+'">Apple Maps</a>'
+      +'<a class="big" style="display:block;text-align:center;text-decoration:none;color:var(--text);border-radius:10px;padding:16px 10px;background:var(--panel);border:1px solid var(--line)" href="'+L.google+'">Google Maps</a>'
+      +'<a class="big" style="display:block;text-align:center;text-decoration:none;color:var(--text);border-radius:10px;padding:16px 10px;background:var(--panel);border:1px solid var(--line)" href="'+L.organic+'">Organic</a></div>'
+      +'<div class="row"><button class="big ok" id="doneBtn">Done ✓</button><button class="big" id="skipBtn">Skip</button></div>'
+      +(s.desc?'<div class="desc"></div>':'')+'</div>'
+      +'<div class="hint">Next: '+(nextAfter(i)||'end of day')+'</div>';
+      now.querySelector('.addr').textContent=s.name||s.id||'(no address)';now.querySelector('.pid').textContent=s.id?('Parcel '+s.id):'';
+      if(s.desc)now.querySelector('.desc').textContent=s.desc;
+      $('doneBtn').onclick=()=>mark(s,'done');$('skipBtn').onclick=()=>mark(s,'skipped');
+    }
+  }
+  if(tab==='list'){const ul=$('list');ul.innerHTML='';
+    day.stops.forEach((s,k)=>{const li=document.createElement('li');li.className=(day.done[s.n]?'done':day.skipped[s.n]?'done':'')+(k===i?' cur':'');
+      const n=document.createElement('span');n.className='n';n.textContent=String(s.n).padStart(3,'0');
+      const t=document.createElement('div');t.className='t';const b=document.createElement('b');b.textContent=s.name||s.id;const sp=document.createElement('span');sp.textContent=s.id||'';t.append(b,sp);
+      const st=document.createElement('span');st.className='st';st.textContent=day.done[s.n]?'done':day.skipped[s.n]?'skipped':'';
+      li.append(n,t,st);li.onclick=()=>{day.cur=k;if(day.done[s.n]||day.skipped[s.n]){delete day.done[s.n];delete day.skipped[s.n]}save();tab='now';render()};ul.appendChild(li)});
+    if(i>=0){const c=ul.querySelector('.cur');if(c)c.scrollIntoView({block:'center'})}
+  }
+  if(tab==='map')drawMap();
+  renderDaySel();
+}
+const nextAfter=i=>{const d=day;for(let k=i+1;k<d.stops.length;k++){const s=d.stops[k];if(!d.done[s.n]&&!d.skipped[s.n])return String(s.n).padStart(3,'0')+' '+(s.name||s.id)}return''};
+function mark(s,how){day[how][s.n]=new Date().toISOString();day.log.push({n:s.n,how});day.cur=day.stops.indexOf(s)+1;save();render();
+  if(navigator.vibrate)navigator.vibrate(20)}
+
+/* ---------- map: plain canvas, no tiles, works offline ---------- */
+const cv=$('map');let view=null,me=null,dragging=null,pinchD=0;
+const COS=()=>Math.cos((day?day.stops[0].lat:40.6)*Math.PI/180);
+function fit(){const c=COS();let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;day.stops.forEach(p=>{x0=Math.min(x0,p.lon*c);x1=Math.max(x1,p.lon*c);y0=Math.min(y0,p.lat);y1=Math.max(y1,p.lat)});
+  const W=cv.width,H=cv.height,sc=Math.min(W/((x1-x0)||1e-6),H/((y1-y0)||1e-6))*0.85;view={c,sc,cx:(x0+x1)/2,cy:(y0+y1)/2,W,H}}
+const X=p=>view.W/2+(p.lon*view.c-view.cx)*view.sc,Y=p=>view.H/2-(p.lat-view.cy)*view.sc;
+function drawMap(){
+  const r=cv.getBoundingClientRect(),dpr=devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);
+  if(!view||view.W!==cv.width||view.H!==cv.height)fit();
+  const g=cv.getContext('2d');g.clearRect(0,0,cv.width,cv.height);const i=nextIndex(day);
+  g.strokeStyle='#2b323c';g.lineWidth=1.5*dpr;g.beginPath();day.stops.forEach((p,k)=>{k?g.lineTo(X(p),Y(p)):g.moveTo(X(p),Y(p))});g.stroke();
+  day.stops.forEach((p,k)=>{const d=day.done[p.n]||day.skipped[p.n];g.fillStyle=k===i?'#4da3ff':d?'#2f7a47':'#9aa5b4';g.beginPath();g.arc(X(p),Y(p),(k===i?7:4)*dpr,0,7);g.fill();
+    if(view.sc>4000*dpr||k===i){g.fillStyle='#eef1f5';g.font=(11*dpr)+'px sans-serif';g.fillText(String(p.n),X(p)+6*dpr,Y(p)-6*dpr)}});
+  if(me){g.strokeStyle='#4da3ff';g.lineWidth=3*dpr;g.beginPath();g.arc(X(me),Y(me),9*dpr,0,7);g.stroke()}
+}
+cv.addEventListener('pointerdown',e=>{dragging={x:e.clientX,y:e.clientY,cx:view.cx,cy:view.cy,moved:false};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!dragging||!view)return;const dpr=devicePixelRatio||1,dx=(e.clientX-dragging.x)*dpr,dy=(e.clientY-dragging.y)*dpr;if(Math.abs(dx)+Math.abs(dy)>6)dragging.moved=true;
+  view.cx=dragging.cx-dx/view.sc;view.cy=dragging.cy+dy/view.sc;drawMap()});
+cv.addEventListener('pointerup',e=>{if(!dragging)return;const was=dragging;dragging=null;if(was.moved||!view)return;
+  const dpr=devicePixelRatio||1,r=cv.getBoundingClientRect(),px=(e.clientX-r.left)*dpr,py=(e.clientY-r.top)*dpr;let best=-1,bd=18*dpr;
+  day.stops.forEach((p,k)=>{const d=Math.hypot(X(p)-px,Y(p)-py);if(d<bd){bd=d;best=k}});
+  if(best>=0){const s=day.stops[best];day.cur=best;if(day.done[s.n]||day.skipped[s.n]){delete day.done[s.n];delete day.skipped[s.n]}save();tab='now';render()}});
+cv.addEventListener('dblclick',()=>{if(view){view.sc*=1.8;drawMap()}});
+cv.addEventListener('wheel',e=>{if(!view)return;e.preventDefault();view.sc*=e.deltaY<0?1.2:1/1.2;drawMap()},{passive:false});
+cv.addEventListener('touchstart',e=>{if(e.touches.length===2)pinchD=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY)},{passive:true});
+cv.addEventListener('touchmove',e=>{if(e.touches.length===2&&view){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(pinchD){view.sc*=d/pinchD;drawMap()}pinchD=d;dragging=null}},{passive:true});
+let geoW=null;
+function watchMe(){if(geoW||!navigator.geolocation)return;geoW=navigator.geolocation.watchPosition(p=>{me={lat:p.coords.latitude,lon:p.coords.longitude};if(tab==='map')drawMap()},()=>{},{enableHighAccuracy:true,maximumAge:5000})}
+
+/* ---------- export ---------- */
+function exportCsv(){if(!day)return;
+  const q=v=>{v=String(v??'');if(/^[=@+\-\t\r]/.test(v)&&!/^[+-]?\d+(\.\d+)?$/.test(v))v="'"+v;return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[['Day','Stop','Parcel','Address','Visited','Photo date','Skipped']];
+  day.stops.forEach(s=>{const d=day.done[s.n],k=day.skipped[s.n];rows.push([day.key,String(s.n).padStart(3,'0'),s.id,s.name,d?'yes':'',d?d.slice(0,10):'',k?'yes':''])});
+  const text=rows.map(r=>r.map(q).join(',')).join('\r\n')+'\r\n',name=day.key.replace(/[^\w-]+/g,'_')+'_results.csv';
+  const file=new File([text],name,{type:'text/csv'});
+  if(navigator.canShare&&navigator.canShare({files:[file]}))navigator.share({files:[file],title:name}).catch(()=>{});
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+}
+
+/* ---------- wiring ---------- */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;if(tab==='map')watchMe();render()});
+$('daySel').onchange=e=>{day=days.find(d=>d.key===e.target.value)||null;pref('day',day?day.key:'');view=null;render()};
+$('menuBtn').onclick=()=>$('sheet').classList.add('show');$('closeBtn').onclick=()=>$('sheet').classList.remove('show');
+$('sheet').addEventListener('click',e=>{if(e.target===$('sheet'))$('sheet').classList.remove('show')});
+$('file').onchange=async e=>{$('sheet').classList.remove('show');await importFiles([...e.target.files]);e.target.value=''};
+$('exportBtn').onclick=()=>{$('sheet').classList.remove('show');exportCsv()};
+$('undoBtn').onclick=()=>{if(!day||!day.log.length)return;const l=day.log.pop();delete day[l.how][l.n];day.cur=day.stops.findIndex(s=>s.n===l.n);save();$('sheet').classList.remove('show');render();toast('Stop '+l.n+' is back')};
+$('resetBtn').onclick=()=>{if(!day)return;if(!confirm('Clear all Done and Skip marks for '+day.key+'?'))return;day.done={};day.skipped={};day.log=[];day.cur=0;save();$('sheet').classList.remove('show');render()};
+$('deleteBtn').onclick=async()=>{if(!day)return;if(!confirm('Remove '+day.key+' from this device? Export first if you need the results.'))return;await dbDel(day.key);$('sheet').classList.remove('show');await load()};
+window.addEventListener('resize',()=>{if(tab==='map'){view=null;drawMap()}});
+if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+load();
+window.__fs={get days(){return days},get day(){return day},importFiles,exportCsv};
+})();
+</script>
+</body>
+</html>
